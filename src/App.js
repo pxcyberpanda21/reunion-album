@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { getFirestore, collection, addDoc, getDocs, orderBy, query } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { getFirestore, collection, addDoc, getDocs, orderBy, query, deleteDoc, doc } from "firebase/firestore";
 import { useState, useEffect } from "react";
 
 const firebaseConfig = {
@@ -16,16 +16,19 @@ const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 const db = getFirestore(app);
 
-const PASSWORD = "reunion2025";
+const PASSWORD = "62niijima2013";
+const ADMIN_PASSWORD = "admin62niijima";
 
 function App() {
   const [authed, setAuthed] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [input, setInput] = useState("");
   const [photos, setPhotos] = useState([]);
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [name, setName] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (authed) loadPhotos();
@@ -35,6 +38,19 @@ function App() {
     const q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
     setPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  }
+
+  function handleLogin() {
+    if (input === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+      setAuthed(true);
+      setError("");
+    } else if (input === PASSWORD) {
+      setAuthed(true);
+      setError("");
+    } else {
+      setError("合言葉が違います");
+    }
   }
 
   async function handleUpload() {
@@ -60,6 +76,18 @@ function App() {
     loadPhotos();
   }
 
+  async function handleDelete(photo) {
+    if (!window.confirm("この写真を削除しますか？")) return;
+    try {
+      const storageRef = ref(storage, photo.path);
+      await deleteObject(storageRef);
+      await deleteDoc(doc(db, "photos", photo.id));
+      setPhotos(prev => prev.filter(p => p.id !== photo.id));
+    } catch (e) {
+      alert("削除に失敗しました");
+    }
+  }
+
   if (!authed) {
     return (
       <div style={styles.center}>
@@ -72,14 +100,10 @@ function App() {
             placeholder="合言葉"
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && input === PASSWORD && setAuthed(true)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
           />
-          <button
-            style={styles.btn}
-            onClick={() => input === PASSWORD && setAuthed(true)}
-          >
-            入室する
-          </button>
+          {error && <p style={styles.error}>{error}</p>}
+          <button style={styles.btn} onClick={handleLogin}>入室する</button>
         </div>
       </div>
     );
@@ -89,7 +113,10 @@ function App() {
     <div style={styles.app}>
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>同窓会アルバム</h1>
-        <span style={styles.badge}>参加者限定</span>
+        <div style={{display:"flex", gap:"8px", alignItems:"center"}}>
+          {isAdmin && <span style={styles.adminBadge}>管理者</span>}
+          <span style={styles.badge}>参加者限定</span>
+        </div>
       </div>
 
       <div style={styles.main}>
@@ -119,7 +146,7 @@ function App() {
             </div>
           )}
           <button
-            style={styles.btn}
+            style={{...styles.btn, opacity: (uploading || !files.length || !name) ? 0.5 : 1}}
             onClick={handleUpload}
             disabled={uploading || !files.length || !name}
           >
@@ -133,7 +160,15 @@ function App() {
               <img src={p.url} alt={p.name} style={styles.photo} />
               <div style={styles.cardInfo}>
                 <span style={styles.cardName}>{p.name}</span>
-                <a href={p.url} download style={styles.dlBtn}>⬇</a>
+                <div style={{display:"flex", gap:"6px", alignItems:"center"}}>
+                  <a href={p.url} download style={styles.dlBtn}>⬇</a>
+                  {(isAdmin || p.name === name) && (
+                    <button
+                      style={styles.deleteBtn}
+                      onClick={() => handleDelete(p)}
+                    >🗑</button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -148,12 +183,14 @@ const styles = {
   loginBox: { background:"white", padding:"32px", borderRadius:"16px", textAlign:"center", width:"280px" },
   title: { fontSize:"20px", fontWeight:"500", marginBottom:"8px" },
   sub: { fontSize:"13px", color:"#888", marginBottom:"16px" },
+  error: { fontSize:"12px", color:"#e24b4a", marginBottom:"8px" },
   input: { width:"100%", padding:"10px 12px", borderRadius:"8px", border:"1px solid #ddd", fontSize:"14px", marginBottom:"10px", boxSizing:"border-box" },
   btn: { width:"100%", padding:"10px", borderRadius:"8px", background:"#7F77DD", color:"white", border:"none", fontSize:"14px", fontWeight:"500", cursor:"pointer" },
   app: { minHeight:"100vh", background:"#f5f5f0" },
   header: { background:"white", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1px solid #eee" },
   headerTitle: { fontSize:"16px", fontWeight:"500" },
   badge: { fontSize:"11px", padding:"3px 10px", borderRadius:"20px", background:"#EEEDFE", color:"#3C3489" },
+  adminBadge: { fontSize:"11px", padding:"3px 10px", borderRadius:"20px", background:"#E1F5EE", color:"#085041" },
   main: { padding:"16px 20px" },
   uploadBox: { background:"white", borderRadius:"12px", padding:"16px", marginBottom:"16px" },
   fileLabel: { display:"block", padding:"10px", borderRadius:"8px", border:"1.5px dashed #ddd", textAlign:"center", cursor:"pointer", fontSize:"13px", color:"#666", marginBottom:"8px" },
@@ -165,7 +202,8 @@ const styles = {
   photo: { width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" },
   cardInfo: { padding:"6px 8px", display:"flex", alignItems:"center", justifyContent:"space-between" },
   cardName: { fontSize:"11px", color:"#666" },
-  dlBtn: { fontSize:"16px", textDecoration:"none" }
+  dlBtn: { fontSize:"16px", textDecoration:"none" },
+  deleteBtn: { fontSize:"14px", background:"none", border:"none", cursor:"pointer", padding:"0" }
 };
 
 export default App;

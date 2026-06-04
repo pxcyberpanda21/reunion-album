@@ -104,6 +104,19 @@ function App() {
           />
           {error && <p style={styles.error}>{error}</p>}
           <button style={styles.btn} onClick={handleLogin}>入室する</button>
+          <div style={styles.termsBox}>
+            <p style={styles.termsTitle}>利用規約</p>
+            <div style={styles.termsScroll}>
+              <p style={styles.termsText}><strong>第1条（目的）</strong><br/>本サービス「同窓会アルバム」は、新島学園高等学校62期生同窓会委員が、同窓会参加者間での写真共有を目的として提供するものです。</p>
+              <p style={styles.termsText}><strong>第2条（利用資格）</strong><br/>本サービスは、運営から合言葉を通知された新島学園高等学校62期生および関係者のみが利用できます。合言葉を第三者に開示することは禁止します。</p>
+              <p style={styles.termsText}><strong>第3条（投稿について）</strong><br/>写真に写っているすべての方の同意を得たうえで投稿してください。他の参加者が不快に感じる写真、肖像権・プライバシーを侵害する写真の投稿は禁止します。投稿した写真の著作権は投稿者本人に帰属します。</p>
+              <p style={styles.termsText}><strong>第4条（写真の取り扱い）</strong><br/>アップロードされた写真は本サービス内での閲覧・ダウンロードのみを目的として保存されます。写真データはアップロードから1年後を目安に削除される場合があります。大切な写真は各自で保存してください。</p>
+              <p style={styles.termsText}><strong>第5条（禁止事項）</strong><br/>他の参加者の写真を無断でSNSや外部サービスに転載すること、他の参加者を誹謗中傷する目的での利用、合言葉を同窓会関係者以外に開示することを禁止します。</p>
+              <p style={styles.termsText}><strong>第6条（免責事項）</strong><br/>運営は本サービスの利用によって生じたトラブル・損害について、故意または重大な過失がある場合を除き、責任を負いません。投稿された写真に関するトラブルは投稿者の責任において解決してください。</p>
+              <p style={styles.termsText}><strong>第7条（規約の変更）</strong><br/>運営は必要に応じて本規約を変更できるものとします。変更後はLINEにて通知します。</p>
+              <p style={styles.termsText}>本サービスを利用した時点で、本規約に同意したものとみなします。</p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -203,7 +216,11 @@ const styles = {
   cardInfo: { padding:"6px 8px", display:"flex", alignItems:"center", justifyContent:"space-between" },
   cardName: { fontSize:"11px", color:"#666" },
   dlBtn: { fontSize:"16px", textDecoration:"none" },
-  deleteBtn: { fontSize:"14px", background:"none", border:"none", cursor:"pointer", padding:"0" }
+  deleteBtn: { fontSize:"14px", background:"none", border:"none", cursor:"pointer", padding:"0" },
+  termsBox: { marginTop:"20px", textAlign:"left" },
+  termsTitle: { fontSize:"12px", fontWeight:"500", color:"#333", marginBottom:"6px" },
+  termsScroll: { height:"150px", overflowY:"scroll", border:"1px solid #eee", borderRadius:"8px", padding:"10px", background:"#fafafa" },
+  termsText: { fontSize:"11px", color:"#666", lineHeight:"1.6", marginBottom:"8px" },
 };
 
 export default App;

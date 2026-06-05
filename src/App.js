@@ -27,7 +27,7 @@ function App() {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => localStorage.getItem("userName") || "");
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("desc");
@@ -144,7 +144,7 @@ function App() {
             style={styles.input}
             placeholder="あなたの名前"
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => { setName(e.target.value); localStorage.setItem("userName", e.target.value); }}
           />
           <label style={styles.fileLabel}>
             📷 写真を選ぶ（複数可）

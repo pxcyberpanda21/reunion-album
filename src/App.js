@@ -29,6 +29,8 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   useEffect(() => {
     if (authed) loadPhotos();
@@ -87,6 +89,10 @@ function App() {
       alert("削除に失敗しました");
     }
   }
+
+  const filteredPhotos = photos
+    .filter(p => search === "" || p.name.includes(search))
+    .sort((a, b) => sortOrder === "desc" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt);
 
   if (!authed) {
     return (
@@ -167,8 +173,31 @@ function App() {
           </button>
         </div>
 
+        <div style={styles.filterRow}>
+          <input
+            style={{...styles.input, marginBottom:0, flex:1}}
+            placeholder="🔍 名前で検索"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <select
+            style={styles.select}
+            value={sortOrder}
+            onChange={e => setSortOrder(e.target.value)}
+          >
+            <option value="desc">新しい順</option>
+            <option value="asc">古い順</option>
+          </select>
+        </div>
+
+        {search && (
+          <p style={styles.searchResult}>
+            「{search}」の検索結果：{filteredPhotos.length}枚
+          </p>
+        )}
+
         <div style={styles.gallery}>
-          {photos.map(p => (
+          {filteredPhotos.map(p => (
             <div key={p.id} style={styles.card}>
               <img src={p.url} alt={p.name} style={styles.photo} />
               <div style={styles.cardInfo}>
@@ -176,16 +205,19 @@ function App() {
                 <div style={{display:"flex", gap:"6px", alignItems:"center"}}>
                   <a href={p.url} download style={styles.dlBtn}>⬇</a>
                   {(isAdmin || p.name === name) && (
-                    <button
-                      style={styles.deleteBtn}
-                      onClick={() => handleDelete(p)}
-                    >🗑</button>
+                    <button style={styles.deleteBtn} onClick={() => handleDelete(p)}>🗑</button>
                   )}
                 </div>
               </div>
             </div>
           ))}
         </div>
+
+        {filteredPhotos.length === 0 && (
+          <p style={styles.empty}>
+            {search ? `「${search}」の写真はまだありません` : "まだ写真がありません"}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -210,6 +242,10 @@ const styles = {
   fileCount: { fontSize:"12px", color:"#7F77DD", marginBottom:"8px", textAlign:"center" },
   progressBar: { background:"#eee", borderRadius:"10px", height:"6px", marginBottom:"8px" },
   progressFill: { background:"#7F77DD", height:"6px", borderRadius:"10px", transition:"width 0.3s" },
+  filterRow: { display:"flex", gap:"8px", alignItems:"center", marginBottom:"10px" },
+  select: { padding:"10px 12px", borderRadius:"8px", border:"1px solid #ddd", fontSize:"13px", background:"white", cursor:"pointer" },
+  searchResult: { fontSize:"12px", color:"#7F77DD", marginBottom:"10px" },
+  empty: { textAlign:"center", color:"#aaa", fontSize:"13px", padding:"40px 0" },
   gallery: { display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"8px" },
   card: { borderRadius:"8px", overflow:"hidden", background:"white", border:"1px solid #eee" },
   photo: { width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" },

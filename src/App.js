@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { getFirestore, collection, addDoc, getDocs, orderBy, query, deleteDoc, doc } from "firebase/firestore";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCMsKoiZvyr-l_118ejp4NFdd1utzeVBOg",
@@ -31,6 +31,10 @@ function App() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [selectMode, setSelectMode] = useState(false);
+  const touchStartX = useRef(null);
 
   useEffect(() => {
     if (authed) loadPhotos();
@@ -64,10 +68,7 @@ function App() {
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       await addDoc(collection(db, "photos"), {
-        url,
-        name,
-        createdAt: Date.now(),
-        path: storageRef.fullPath
+        url, name, createdAt: Date.now(), path: storageRef.fullPath
       });
       done++;
       setProgress(Math.round((done / files.length) * 100));
@@ -81,13 +82,69 @@ function App() {
   async function handleDelete(photo) {
     if (!window.confirm("この写真を削除しますか？")) return;
     try {
-      const storageRef = ref(storage, photo.path);
-      await deleteObject(storageRef);
+      await deleteObject(ref(storage, photo.path));
       await deleteDoc(doc(db, "photos", photo.id));
       setPhotos(prev => prev.filter(p => p.id !== photo.id));
     } catch (e) {
       alert("削除に失敗しました");
     }
+  }
+
+  async function handleBulkDelete() {
+    if (!window.confirm(`${selected.length}枚の写真を削除しますか？`)) return;
+    for (const id of selected) {
+      const photo = photos.find(p => p.id === id);
+      if (!photo) continue;
+      try {
+        await deleteObject(ref(storage, photo.path));
+        await deleteDoc(doc(db, "photos", photo.id));
+      } catch (e) {}
+    }
+    setPhotos(prev => prev.filter(p => !selected.includes(p.id)));
+    setSelected([]);
+    setSelectMode(false);
+  }
+
+  function toggleSelect(id) {
+    setSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  }
+
+  function handleCardClick(index) {
+    if (selectMode) {
+      toggleSelect(filteredPhotos[index].id);
+    } else {
+      setLightboxIndex(index);
+    }
+  }
+
+  function handleCardLongPress(id) {
+    setSelectMode(true);
+    setSelected([id]);
+  }
+
+  function closeLightbox() {
+    setLightboxIndex(null);
+  }
+
+  function prevPhoto() {
+    setLightboxIndex(i => (i > 0 ? i - 1 : filteredPhotos.length - 1));
+  }
+
+  function nextPhoto() {
+    setLightboxIndex(i => (i < filteredPhotos.length - 1 ? i + 1 : 0));
+  }
+
+  function handleTouchStart(e) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+
+  function handleTouchEnd(e) {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      diff > 0 ? nextPhoto() : prevPhoto();
+    }
+    touchStartX.current = null;
   }
 
   const filteredPhotos = photos
@@ -148,28 +205,21 @@ function App() {
           />
           <label style={styles.fileLabel}>
             📷 写真を選ぶ（複数可）
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: "none" }}
-              onChange={e => setFiles(Array.from(e.target.files))}
-            />
+            <input type="file" accept="image/*" multiple style={{display:"none"}}
+              onChange={e => setFiles(Array.from(e.target.files))} />
           </label>
-          {files.length > 0 && (
-            <p style={styles.fileCount}>{files.length}枚選択中</p>
-          )}
+          {files.length > 0 && <p style={styles.fileCount}>{files.length}枚選択中</p>}
           {uploading && (
             <div style={styles.progressBar}>
-              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+              <div style={{...styles.progressFill, width:`${progress}%`}} />
             </div>
           )}
           <button
-            style={{...styles.btn, opacity: (uploading || !files.length || !name) ? 0.5 : 1}}
+            style={{...styles.btn, opacity:(uploading||!files.length||!name)?0.5:1}}
             onClick={handleUpload}
-            disabled={uploading || !files.length || !name}
+            disabled={uploading||!files.length||!name}
           >
-            {uploading ? `アップロード中... ${progress}%` : `${files.length || 0}枚をアップロード`}
+            {uploading ? `アップロード中... ${progress}%` : `${files.length||0}枚をアップロード`}
           </button>
         </div>
 
@@ -180,45 +230,78 @@ function App() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <select
-            style={styles.select}
-            value={sortOrder}
-            onChange={e => setSortOrder(e.target.value)}
-          >
+          <select style={styles.select} value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
             <option value="desc">新しい順</option>
             <option value="asc">古い順</option>
           </select>
         </div>
 
-        {search && (
-          <p style={styles.searchResult}>
-            「{search}」の検索結果：{filteredPhotos.length}枚
-          </p>
+        {selectMode && (
+          <div style={styles.selectBar}>
+            <span style={{fontSize:"13px", color:"#666"}}>{selected.length}枚選択中</span>
+            <div style={{display:"flex", gap:"8px"}}>
+              <button style={styles.cancelBtn} onClick={() => { setSelectMode(false); setSelected([]); }}>キャンセル</button>
+              {(isAdmin || selected.every(id => photos.find(p => p.id === id)?.name === name)) && selected.length > 0 && (
+                <button style={styles.deleteBarBtn} onClick={handleBulkDelete}>🗑 削除</button>
+              )}
+            </div>
+          </div>
         )}
 
+        {!selectMode && <p style={styles.hint}>長押しで複数選択・削除できます</p>}
+
+        {search && <p style={styles.searchResult}>「{search}」の検索結果：{filteredPhotos.length}枚</p>}
+
         <div style={styles.gallery}>
-          {filteredPhotos.map(p => (
-            <div key={p.id} style={styles.card}>
-              <img src={p.url} alt={p.name} style={styles.photo} />
-              <div style={styles.cardInfo}>
-                <span style={styles.cardName}>{p.name}</span>
-                <div style={{display:"flex", gap:"6px", alignItems:"center"}}>
-                  <a href={p.url} download style={styles.dlBtn}>⬇</a>
-                  {(isAdmin || p.name === name) && (
-                    <button style={styles.deleteBtn} onClick={() => handleDelete(p)}>🗑</button>
+          {filteredPhotos.map((p, index) => {
+            const isSelected = selected.includes(p.id);
+            let pressTimer = null;
+            return (
+              <div
+                key={p.id}
+                style={{...styles.card, outline: isSelected ? "3px solid #7F77DD" : "none", position:"relative"}}
+                onClick={() => handleCardClick(index)}
+                onTouchStart={() => { pressTimer = setTimeout(() => handleCardLongPress(p.id), 500); }}
+                onTouchEnd={() => clearTimeout(pressTimer)}
+                onMouseDown={() => { pressTimer = setTimeout(() => handleCardLongPress(p.id), 500); }}
+                onMouseUp={() => clearTimeout(pressTimer)}
+              >
+                <img src={p.url} alt={p.name} style={styles.photo} />
+                {isSelected && (
+                  <div style={styles.checkMark}>✓</div>
+                )}
+                <div style={styles.cardInfo}>
+                  <span style={styles.cardName}>{p.name}</span>
+                  {!selectMode && (isAdmin || p.name === name) && (
+                    <button style={styles.deleteBtn} onClick={e => { e.stopPropagation(); handleDelete(p); }}>🗑</button>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {filteredPhotos.length === 0 && (
-          <p style={styles.empty}>
-            {search ? `「${search}」の写真はまだありません` : "まだ写真がありません"}
-          </p>
+          <p style={styles.empty}>{search ? `「${search}」の写真はまだありません` : "まだ写真がありません"}</p>
         )}
       </div>
+
+      {lightboxIndex !== null && (
+        <div
+          style={styles.lightbox}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <button style={styles.lbClose} onClick={closeLightbox}>✕</button>
+          <button style={styles.lbArrowLeft} onClick={prevPhoto}>‹</button>
+          <div style={styles.lbContent}>
+            <img src={filteredPhotos[lightboxIndex].url} alt={filteredPhotos[lightboxIndex].name} style={styles.lbImage} />
+            <p style={styles.lbName}>{filteredPhotos[lightboxIndex].name}</p>
+            <p style={styles.lbCount}>{lightboxIndex + 1} / {filteredPhotos.length}</p>
+          </div>
+          <button style={styles.lbArrowRight} onClick={nextPhoto}>›</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -244,15 +327,27 @@ const styles = {
   progressFill: { background:"#7F77DD", height:"6px", borderRadius:"10px", transition:"width 0.3s" },
   filterRow: { display:"flex", gap:"8px", alignItems:"center", marginBottom:"10px" },
   select: { padding:"10px 12px", borderRadius:"8px", border:"1px solid #ddd", fontSize:"13px", background:"white", cursor:"pointer" },
+  selectBar: { display:"flex", justifyContent:"space-between", alignItems:"center", background:"white", padding:"10px 12px", borderRadius:"8px", marginBottom:"10px", border:"1px solid #ddd" },
+  cancelBtn: { padding:"6px 12px", borderRadius:"8px", border:"1px solid #ddd", background:"white", fontSize:"13px", cursor:"pointer" },
+  deleteBarBtn: { padding:"6px 12px", borderRadius:"8px", border:"none", background:"#e24b4a", color:"white", fontSize:"13px", cursor:"pointer" },
+  hint: { fontSize:"11px", color:"#aaa", marginBottom:"8px", textAlign:"center" },
   searchResult: { fontSize:"12px", color:"#7F77DD", marginBottom:"10px" },
   empty: { textAlign:"center", color:"#aaa", fontSize:"13px", padding:"40px 0" },
   gallery: { display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"8px" },
-  card: { borderRadius:"8px", overflow:"hidden", background:"white", border:"1px solid #eee" },
+  card: { borderRadius:"8px", overflow:"hidden", background:"white", border:"1px solid #eee", cursor:"pointer" },
   photo: { width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" },
+  checkMark: { position:"absolute", top:"6px", right:"6px", width:"22px", height:"22px", borderRadius:"50%", background:"#7F77DD", color:"white", fontSize:"13px", display:"flex", alignItems:"center", justifyContent:"center" },
   cardInfo: { padding:"6px 8px", display:"flex", alignItems:"center", justifyContent:"space-between" },
   cardName: { fontSize:"11px", color:"#666" },
-  dlBtn: { fontSize:"16px", textDecoration:"none" },
   deleteBtn: { fontSize:"14px", background:"none", border:"none", cursor:"pointer", padding:"0" },
+  lightbox: { position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.9)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 },
+  lbClose: { position:"absolute", top:"16px", right:"16px", background:"rgba(255,255,255,0.2)", border:"none", color:"white", fontSize:"20px", width:"36px", height:"36px", borderRadius:"50%", cursor:"pointer" },
+  lbArrowLeft: { position:"absolute", left:"12px", background:"rgba(255,255,255,0.15)", border:"none", color:"white", fontSize:"36px", width:"44px", height:"44px", borderRadius:"50%", cursor:"pointer" },
+  lbArrowRight: { position:"absolute", right:"12px", background:"rgba(255,255,255,0.15)", border:"none", color:"white", fontSize:"36px", width:"44px", height:"44px", borderRadius:"50%", cursor:"pointer" },
+  lbContent: { display:"flex", flexDirection:"column", alignItems:"center", gap:"8px", maxWidth:"90vw" },
+  lbImage: { maxWidth:"90vw", maxHeight:"75vh", objectFit:"contain", borderRadius:"8px" },
+  lbName: { color:"white", fontSize:"13px" },
+  lbCount: { color:"rgba(255,255,255,0.6)", fontSize:"12px" },
   termsBox: { marginTop:"20px", textAlign:"left" },
   termsTitle: { fontSize:"12px", fontWeight:"500", color:"#333", marginBottom:"6px" },
   termsScroll: { height:"150px", overflowY:"scroll", border:"1px solid #eee", borderRadius:"8px", padding:"10px", background:"#fafafa" },
